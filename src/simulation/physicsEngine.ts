@@ -3,8 +3,22 @@ import { BodyType, PhysicsBody, PhysicsShape, ShapeType } from "../types/physics
 import Vector2 from "../types/vector2";
 import { forEachPair } from "../utils/helpers";
 
+export interface PhysicsConfig {
+    slop: number;
+    penCorrection: number;
+}
+
 export class PhysicsEngine {
+    public config: PhysicsConfig;
     public bodies: Map<string, PhysicsBody> = new Map();
+
+    constructor(config: Partial<PhysicsConfig> = {})
+    {
+        this.config = {
+            slop: config.slop ?? .01,
+            penCorrection: config.penCorrection ?? .8,
+        }
+    }
 
     public addBody(bodyDef: Partial<PhysicsBody>){
         const body = new PhysicsBody(
@@ -15,10 +29,21 @@ export class PhysicsEngine {
             bodyDef.linearVelocity ?? new Vector2(0,0),
             bodyDef.angularVelocity ?? 0,
             bodyDef.density ?? 1,
-            0 // area will be computed below
+            0, // area will be computed below,
+            bodyDef.elasticity ?? 1,
+            0,
+            0,
         );
 
         body.area = this.computeArea(body.shape);
+
+        if(body.type === BodyType.static){
+            body.mass = Infinity;
+            body.invMass = 0;
+        } else {
+            body.mass = body.density * body.area;
+            body.invMass = 1 / body.mass;
+        }
 
         this.bodies.set(crypto.randomUUID(), body);
     }
@@ -45,18 +70,22 @@ export class PhysicsEngine {
 
         forEachPair<PhysicsBody>(Array.from(this.bodies.values()), (a,b) => {
             const coll = this.detectCollision(a,b)
-            if(coll.isColliding) this.solveCollision(coll);
+            if(coll.isColliding) {
+                this.solveCollision(coll);
+                this.solveOverlap(coll);
+            }
+            
         })
     }
 
     private detectCollision(a: PhysicsBody, b: PhysicsBody): CollisionManifold {
         if(a.shape.type === ShapeType.circle && b.shape.type === ShapeType.circle){
             const normal = b.position.diff(a.position).normalize();
-            const approaching = b.linearVelocity.diff(a.linearVelocity).dot(normal) <= 0;
+            const penetration = (a.shape.radius + b.shape.radius) - a.position.diff(b.position).magnitude();
 
             return {
-                isColliding: a.position.diff(b.position).magnitude() <= a.shape.radius + b.shape.radius && approaching,
-                penetration: 0,
+                isColliding: penetration > 0,
+                penetration: penetration,
                 normal: normal,
                 a: a,
                 b: b,
@@ -73,40 +102,32 @@ export class PhysicsEngine {
 
     private solveCollision(coll: CollisionManifold){
         if(coll.a.shape.type === ShapeType.circle && coll.b.shape.type === ShapeType.circle){
-            console.log("colliding");
-
             const n = coll.normal!;
-            const t = coll.normal!.rotate(Math.PI / 2);
+            const e = Math.min(coll.a.elasticity, coll.b.elasticity);
+            const relVel = coll.b.linearVelocity.diff(coll.a.linearVelocity);
 
-            const compA = this.getComponents(coll.a, n);
-            const compB = this.getComponents(coll.b, n);
+            if(relVel.dot(n) > 0) return;
 
-            const mSum = coll.a.mass + coll.b.mass;
+            if(coll.a.invMass + coll.b.invMass === 0) return;
 
-            // Resultant along normal
-            const vn_a = n.multiply((coll.a.mass - coll.b.mass) * compA.n / mSum + ((2 * coll.b.mass) / mSum) * compB.n);
-            const vn_b = n.multiply((coll.b.mass - coll.a.mass) * compB.n / mSum + ((2 * coll.a.mass) / mSum) * compA.n);
+            //Impulse Calculation
+            const impulse = -(1 + e) / (coll.a.invMass + coll.b.invMass) * relVel.dot(n);
 
-            // Tan stays the same
-            const vt_a = t.multiply(compA.t);
-            const vt_b = t.multiply(compB.t);
-
-            // Apply to bodies
-            coll.a.linearVelocity = vn_a.add(vt_a);
-            coll.b.linearVelocity = vn_b.add(vt_b);
+            //Solve velocities
+            coll.a.linearVelocity = coll.a.linearVelocity.diff(n.multiply(impulse * coll.a.invMass));
+            coll.b.linearVelocity = coll.b.linearVelocity.add(n.multiply(impulse * coll.b.invMass));
         }
     }
 
-    private getComponents(body: PhysicsBody, normal: Vector2): ComponentScalar{
-        const tan = normal.rotate(Math.PI / 2);
-        return {
-            n: body.linearVelocity.dot(normal),
-            t: body.linearVelocity.dot(tan),
-        }
-    }
-}
+    private solveOverlap(coll: CollisionManifold){
+        const n = coll.normal!;
+        const mSum = coll.a.invMass + coll.b.invMass;
 
-interface ComponentScalar {
-    n: number,
-    t: number,
+        if(mSum === 0) return;
+
+        const correction = Math.max(coll.penetration - this.config.slop, 0) * this.config.penCorrection;
+
+        coll.a.position = coll.a.position.diff(n.multiply(correction * coll.a.invMass / mSum));
+        coll.b.position = coll.b.position.add(n.multiply(correction * coll.b.invMass / mSum));
+    }
 }

@@ -30,6 +30,7 @@ import Vector2 from "./types/vector2";
       angularVelocity: 0,
       linearVelocity: new Vector2(Math.random() * 10 - 5, Math.random() * 10 - 5),
       density: 1,
+      elasticity: 1,
     })
   })
 

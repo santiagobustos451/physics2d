@@ -13,6 +13,9 @@ export class PhysicsBody {
     angularVelocity: number;
     density: number;
     area: number;
+    elasticity: number;
+    mass: number;
+    invMass: number;
 
     constructor(
         type: BodyType,
@@ -22,7 +25,10 @@ export class PhysicsBody {
         linearVelocity: Vector2,
         angularVelocity: number,
         density: number,
-        area: number
+        area: number,
+        elasticity: number,
+        mass: number,
+        invMass: number,
     ) {
         this.type = type;
         this.shape = shape;
@@ -32,10 +38,9 @@ export class PhysicsBody {
         this.angularVelocity = angularVelocity;
         this.density = density;
         this.area = area;
-    }
-
-    get mass(): number {
-        return this.area * this.density;
+        this.elasticity = elasticity;
+        this.mass = mass;
+        this.invMass = invMass;
     }
 }
 
