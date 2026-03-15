@@ -24,15 +24,21 @@ import Vector2 from "./types/vector2";
     console.log("clicked the thingy");
     physicsEngine.addBody({
       type: BodyType.dynamic,
-      shape: {type: ShapeType.circle, radius: Math.random() * 30 + 10},
-      position: new Vector2(Math.random() * 200 + 200, Math.random() * 200 + 200),
+      shape: { type: ShapeType.circle, radius: Math.random() * 30 + 10 },
+      position: new Vector2(
+        Math.random() * 200 + 200,
+        Math.random() * 200 + 200,
+      ),
       rotation: 0,
       angularVelocity: 0,
-      linearVelocity: new Vector2(Math.random() * 10 - 5, Math.random() * 10 - 5),
+      linearVelocity: new Vector2(
+        Math.random() * 10 - 5,
+        Math.random() * 10 - 5,
+      ),
       density: 1,
       elasticity: 1,
-    })
-  })
+    });
+  });
 
   // Listen for animate update
   app.ticker.add((time) => {
